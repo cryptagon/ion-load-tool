@@ -122,7 +122,7 @@ func main() {
 	flag.IntVar(&runSeconds, "seconds", 60, "Number of seconds to run test for")
 	flag.BoolVar(&consume, "consume", false, "Run subscribe to all streams and consume data")
 	flag.BoolVar(&audio, "audio", false, "Publish audio stream from webm file")
-	flag.StringVar(&accessToken, "token", "1q2dGu5pzikcrECJgW3ADfXX3EsmoD99SYvSVCpDsJrAqxou5tUNbHPvkEFI4bTS", "Access token")
+	flag.StringVar(&accessToken, "token", "", "Access token")
 
 	flag.Parse()
 

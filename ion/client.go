@@ -2,7 +2,9 @@ package ion
 
 import (
 	"encoding/json"
+	"fmt"
 	"log"
+	"net/url"
 
 	"github.com/cloudwebrtc/go-protoo/client"
 	"github.com/cloudwebrtc/go-protoo/logger"
@@ -39,7 +41,7 @@ type RoomClient struct {
 	WsPeer     *peer.Peer
 	room       proto.RoomInfo
 	name       string
-	token      string
+	token      proto.RoomToken
 	AudioTrack *webrtc.Track
 	VideoTrack *webrtc.Track
 	paused     bool
@@ -77,10 +79,12 @@ func NewClient(name, room, path string, accessToken string) RoomClient {
 		},
 		pubPeerCon: pc,
 		room: proto.RoomInfo{
-			Uid: uidStr,
-			Rid: room,
+			UID: proto.UID(uidStr),
+			RID: proto.RID(room),
 		},
-		token:     accessToken,
+		token: proto.RoomToken{
+			Token: accessToken,
+		},
 		name:      name,
 		ionPath:   path,
 		ReadyChan: make(chan bool),
@@ -89,13 +93,24 @@ func NewClient(name, room, path string, accessToken string) RoomClient {
 }
 
 func (t *RoomClient) Init() {
-	t.client = client.NewClient(t.ionPath+"?peer="+t.room.Uid+"&access_token="+t.token, t.handleWebSocketOpen)
+	baseUrl, err := url.Parse(t.ionPath)
+	if err != nil {
+		fmt.Println("Malformed URL: ", err.Error())
+		return
+	}
+	params := url.Values{}
+	params.Add("peer", string(t.room.UID))
+	if t.token.Token != "" {
+		params.Add("access_token", string(t.token.Token))
+	}
+	baseUrl.RawQuery = params.Encode()
+	t.client = client.NewClient(baseUrl.String(), t.handleWebSocketOpen)
 }
 
 func (t *RoomClient) handleWebSocketOpen(transport *transport.WebSocketTransport) {
 	logger.Infof("handleWebSocketOpen")
 
-	t.WsPeer = peer.NewPeer(t.room.Uid, transport)
+	t.WsPeer = peer.NewPeer(string(t.room.UID), transport)
 
 	go func() {
 		for {
@@ -113,7 +128,7 @@ func (t *RoomClient) handleWebSocketOpen(transport *transport.WebSocketTransport
 }
 
 func (t *RoomClient) Join() {
-	joinMsg := proto.JoinMsg{RoomInfo: t.room, Info: proto.ClientUserInfo{Name: t.name}}
+	joinMsg := proto.JoinMsg{RoomInfo: t.room, RoomToken: t.token, Info: proto.ClientUserInfo{Name: t.name}}
 	res := <-t.WsPeer.Request(proto.ClientJoin, joinMsg, nil, nil)
 
 	if res.Err != nil {
@@ -155,9 +170,10 @@ func (t *RoomClient) Publish(codec string) {
 	}
 
 	pubMsg := proto.PublishMsg{
-		RoomInfo: t.room,
-		RTCInfo:  proto.RTCInfo{Jsep: offer},
-		Options:  newPublishOptions(codec),
+		RoomInfo:  t.room,
+		RoomToken: t.token,
+		RTCInfo:   proto.RTCInfo{Jsep: offer},
+		Options:   newPublishOptions(codec),
 	}
 
 	res := <-t.WsPeer.Request(proto.ClientPublish, pubMsg, nil, nil)

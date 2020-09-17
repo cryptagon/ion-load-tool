@@ -57,7 +57,8 @@ func newConsumerPeerCon(clientId string, consumerId int, codecType string) *webr
 
 	// Allow us to receive 1 audio track, and 1 video track
 	if _, err = peerConnection.AddTransceiverFromKind(webrtc.RTPCodecTypeVideo); err != nil {
-		panic(err)
+		// !nn! - commented this line so we can have real user jump in the testing room
+		//panic(err)
 	}
 
 	peerConnection.OnICEConnectionStateChange(func(connectionState webrtc.ICEConnectionState) {
