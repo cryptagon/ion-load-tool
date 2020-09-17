@@ -36,6 +36,7 @@ github.com/chuckpreslar/emission v0.0.0-20170206194824-a7ddd980baf9/go.mod h1:2w
 github.com/client9/misspell v0.3.4/go.mod h1:qj6jICC3Q7zFZvVWo7KLAzC3yx5G7kyvSDkc90ppPyw=
 github.com/cloudwebrtc/go-protoo v0.0.0-20200510140124-cf4744e87257 h1:wFUOcfpZkIkTj3VLzzDGFkpXIkP7N/JOnliKLpCqjyY=
 github.com/cloudwebrtc/go-protoo v0.0.0-20200510140124-cf4744e87257/go.mod h1:Q0DiItmsD5iCBdeID9Xu03ok8bemc78XJ+0rYATQbuQ=
+github.com/cloudwebrtc/go-protoo v0.0.0-20200602160428-0a199e23f7e0 h1:7lmqBSdb1ILwUJalqJdIoWPH0cnnQt4NshxXnVvrmx0=
 github.com/cloudwebrtc/nats-protoo v0.0.0-20200328144814-d3c1c848d442 h1:jQwLu2qva1swuN+HcWSpr+SrJ/zPScQegf6gVG0fiok=
 github.com/cloudwebrtc/nats-protoo v0.0.0-20200328144814-d3c1c848d442/go.mod h1:GChOgYiUBBZTCzjSPbPCDIQCAtScaaJmvb41Vw83TLQ=
 github.com/coreos/bbolt v1.3.2 h1:wZwiHHUieZCquLkDL0B8UhzreNWsPHooDAG3q34zk0s=
@@ -98,6 +99,7 @@ github.com/google/pprof v0.0.0-20190515194954-54271f7e092f/go.mod h1:zfwlbNMJ+OI
 github.com/google/renameio v0.1.0/go.mod h1:KWCgfxg9yswjAJkECMjeO8J8rahYeXnNhOm40UhjYkI=
 github.com/google/uuid v1.1.1 h1:Gkbcsh/GbpXz7lPftLA3P6TYMwjCLYm83jiFQZF/3gY=
 github.com/google/uuid v1.1.1/go.mod h1:TIyPZe4MgqvfeYDBFedMoGGpEw/LqOeaOT+nhxU+yHo=
+github.com/google/uuid v1.1.2 h1:EVhdT+1Kseyi1/pUmXKaFxYsDNy9RQYkMWRH68J/W7Y=
 github.com/google/uuid v1.1.2/go.mod h1:TIyPZe4MgqvfeYDBFedMoGGpEw/LqOeaOT+nhxU+yHo=
 github.com/googleapis/gax-go/v2 v2.0.4/go.mod h1:0Wqv26UfaUD9n4G6kQubkQ+KchISgw+vpHVxEJEs9eg=
 github.com/googleapis/gax-go/v2 v2.0.5/go.mod h1:DWXyrwAJ9X0FpwwEdw+IPEYBICEFu5mhpdKc/us6bOk=
@@ -222,6 +224,7 @@ github.com/pion/ice v0.7.18 h1:KbAWlzWRUdX9SmehBh3gYpIFsirjhSQsCw6K2MjYMK0=
 github.com/pion/ice v0.7.18/go.mod h1:+Bvnm3nYC6Nnp7VV6glUkuOfToB/AtMRZpOU8ihuf4c=
 github.com/pion/ion v0.3.5 h1:YgcyZubGAoM5blVgb+T79eL6z3lyaxSwFbDC185q0Bk=
 github.com/pion/ion v0.3.5/go.mod h1:Sv7I0St3lE2cdPBSbZRl2m+PajeVR1WFLtSGrrV3I34=
+github.com/pion/ion v0.4.6 h1:Jey1VXKtfwGYxG9zdc+AmE4X4f2zIC8fYQe+7YxsgQw=
 github.com/pion/logging v0.2.2 h1:M9+AIj/+pxNsDfAT64+MAVgJO0rsyLnoJKCqf//DoeY=
 github.com/pion/logging v0.2.2/go.mod h1:k0/tDVsRCX2Mb2ZEmTqNa7CWsQPc+YYCB7Q+5pahoms=
 github.com/pion/mdns v0.0.4 h1:O4vvVqr4DGX63vzmO6Fw9vpy3lfztVWHGCQfyw0ZLSY=

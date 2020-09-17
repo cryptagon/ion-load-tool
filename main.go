@@ -79,9 +79,9 @@ func (t *testRun) runClient() {
 	t.client.Close()
 }
 
-func (t *testRun) setupClient(room, path, vidFile, fileType string, audio bool) {
+func (t *testRun) setupClient(room, path, vidFile, fileType string, audio bool, accessToken string) {
 	name := fmt.Sprintf(clientNameTmpl, t.index)
-	t.client = ion.NewClient(name, room, path)
+	t.client = ion.NewClient(name, room, path, accessToken)
 	t.doneCh = make(chan interface{})
 
 	if t.produce {
@@ -107,7 +107,7 @@ func (t *testRun) setupClient(room, path, vidFile, fileType string, audio bool) 
 }
 
 func main() {
-	var containerPath, containerType string
+	var containerPath, containerType, accessToken string
 	var ionPath, roomName string
 	var numClients, runSeconds int
 	var consume, produce bool
@@ -122,6 +122,7 @@ func main() {
 	flag.IntVar(&runSeconds, "seconds", 60, "Number of seconds to run test for")
 	flag.BoolVar(&consume, "consume", false, "Run subscribe to all streams and consume data")
 	flag.BoolVar(&audio, "audio", false, "Publish audio stream from webm file")
+	flag.StringVar(&accessToken, "token", "1q2dGu5pzikcrECJgW3ADfXX3EsmoD99SYvSVCpDsJrAqxou5tUNbHPvkEFI4bTS", "Access token")
 
 	flag.Parse()
 
@@ -143,7 +144,7 @@ func main() {
 
 	for i := 0; i < numClients; i++ {
 		cfg := &testRun{consume: consume, produce: produce, index: i}
-		cfg.setupClient(roomName, ionPath, containerPath, containerType, audio)
+		cfg.setupClient(roomName, ionPath, containerPath, containerType, audio, accessToken)
 		clients[i] = cfg
 		time.Sleep(staggerDur)
 	}

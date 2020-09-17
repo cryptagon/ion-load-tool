@@ -39,6 +39,7 @@ type RoomClient struct {
 	WsPeer     *peer.Peer
 	room       proto.RoomInfo
 	name       string
+	token      string
 	AudioTrack *webrtc.Track
 	VideoTrack *webrtc.Track
 	paused     bool
@@ -58,7 +59,7 @@ func newPeerCon() *webrtc.PeerConnection {
 	return pc
 }
 
-func NewClient(name, room, path string) RoomClient {
+func NewClient(name, room, path string, accessToken string) RoomClient {
 	pc := newPeerCon()
 	uidStr := name
 	uuid, err := uuid.NewRandom()
@@ -79,6 +80,7 @@ func NewClient(name, room, path string) RoomClient {
 			Uid: uidStr,
 			Rid: room,
 		},
+		token:     accessToken,
 		name:      name,
 		ionPath:   path,
 		ReadyChan: make(chan bool),
@@ -87,7 +89,7 @@ func NewClient(name, room, path string) RoomClient {
 }
 
 func (t *RoomClient) Init() {
-	t.client = client.NewClient(t.ionPath+"?peer="+t.room.Uid, t.handleWebSocketOpen)
+	t.client = client.NewClient(t.ionPath+"?peer="+t.room.Uid+"&access_token="+t.token, t.handleWebSocketOpen)
 }
 
 func (t *RoomClient) handleWebSocketOpen(transport *transport.WebSocketTransport) {
