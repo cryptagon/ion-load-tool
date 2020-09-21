@@ -29,7 +29,7 @@ func newConsumerPeerCon(clientId string, consumerId int, codecType string) *webr
 	// Create a MediaEngine object to configure the supported codec
 	m := webrtc.MediaEngine{}
 
-	// TODO handle audio later
+	// TODO handle Audio later
 	// m.RegisterCodec(webrtc.NewRTPOpusCodec(webrtc.DefaultPayloadTypeOpus, 48000))
 
 	switch codecType {
@@ -55,7 +55,7 @@ func newConsumerPeerCon(clientId string, consumerId int, codecType string) *webr
 		panic(err)
 	}
 
-	// Allow us to receive 1 audio track, and 1 video track
+	// Allow us to receive 1 Audio track, and 1 Video track
 	if _, err = peerConnection.AddTransceiverFromKind(webrtc.RTPCodecTypeVideo); err != nil {
 		// !nn! - commented this line so we can have real user jump in the testing room
 		//panic(err)
