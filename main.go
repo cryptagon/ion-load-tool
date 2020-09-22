@@ -6,10 +6,15 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
+	"os"
+	"os/signal"
 	"sync"
+	"syscall"
+	"time"
 
 	"github.com/cloudwebrtc/go-protoo/logger"
 	"github.com/pion/ion-load-tool/ion"
+	"github.com/pion/producer"
 )
 
 var (
@@ -68,11 +73,41 @@ func main() {
 
 	flag.Parse()
 
-	var roomRun ion.RoomRun
-	roomRun.Run(&r)
+	r.Produce = r.ContainerPath != ""
+	// Validate type
+	if r.Produce {
+		ext, ok := producer.ValidateVPFile(r.ContainerPath)
+		log.Println(ext)
+		if !ok {
+			panic("Only IVF and WEBM containers are supported.")
+		}
+		r.ContainerType = ext
+	}
+
+	waitGroup.Add(1)
+
+	// make loop to start all rooms
+	roomRun := &ion.RoomRun{}
+	go roomRun.Run(&r, &waitGroup)
+
+	timer := time.NewTimer(time.Duration(r.RunSeconds) * time.Second)
+
+	// Setup shutdown
+	sigs := make(chan os.Signal, 1)
+	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
+
+	select {
+	case <-sigs:
+	case <-timer.C:
+	}
+
+	// make loop to stop all rooms
+	roomRun.Stop()
+
+	waitGroup.Wait()
 
 	// log.Println("Wait for client shutdown")
 	// waitGroup.Wait()
 	log.Println("Done")
-	printReport(r.ReportPath, &roomRun)
+	printReport(r.ReportPath, roomRun)
 }
