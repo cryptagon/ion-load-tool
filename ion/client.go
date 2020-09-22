@@ -48,7 +48,7 @@ type PeerReport struct {
 type RoomClient struct {
 	proto.MediaInfo
 	ClientChans
-	PeerReport
+	*PeerReport
 	pubPeerCon *webrtc.PeerConnection
 	WsPeer     *peer.Peer
 	room       proto.RoomInfo
@@ -97,7 +97,7 @@ func NewClient(name, room, path string, accessToken string) RoomClient {
 		token: proto.RoomToken{
 			Token: accessToken,
 		},
-		PeerReport: PeerReport{
+		PeerReport: &PeerReport{
 			Name: name,
 		},
 		name:      name,
