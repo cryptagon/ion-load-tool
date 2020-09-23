@@ -1,7 +1,7 @@
 package main
 
 import (
-	"bytes"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"io/ioutil"
@@ -26,27 +26,21 @@ func init() {
 	logger.SetLevel(logger.InfoLevel)
 }
 
-func printReport(reportPath string, roomRun *ion.RoomRun) {
-	var b bytes.Buffer
-	fmt.Fprintln(&b, "***** REPORT *****")
-	fmt.Fprintf(&b, "Clients: %v\n", len(roomRun.RoomReport))
-	for _, pr := range roomRun.RoomReport {
-		fmt.Fprintln(&b)
-		fmt.Fprintf(&b, "Peer: %v\n", pr.Name)
-		fmt.Fprintf(&b, "  received streams: %v, tracks: %v\n", pr.StreamsRecvNum, pr.TracksRecvNum)
-		fmt.Fprintf(&b, "  published audio: %t, video: %t, errors: %v, unpublished: %v\n", pr.Audio, pr.Video, pr.PublishError, pr.UnpublishCalls)
-		fmt.Fprintf(&b, "  ICE Failures: %v, Disconnects: %v\n", pr.IceFailure, pr.IceDisconnect)
+func printRoomReports(reportPath string, roomReports []*ion.RoomReport) {
+	report, err := json.MarshalIndent(roomReports, "", "    ")
+	if err != nil {
+		log.Fatal("Failed to generate report", err)
 	}
-	fmt.Fprintln(&b, "**** END ****")
 	if reportPath != "" {
-		err := ioutil.WriteFile(reportPath, b.Bytes(), 0644)
+		err := ioutil.WriteFile(reportPath, report, 0644)
 		if err != nil {
 			log.Println("Failed to write report to " + reportPath + "!!!!!")
-			log.Println(b.String())
+			log.Println(string(report))
 		}
 	} else {
-		log.Println(b.String())
+		log.Println(string(report))
 	}
+
 }
 
 func getSuffix(roomNum, index int) string {
@@ -61,12 +55,6 @@ func getSuffix(roomNum, index int) string {
 }
 
 func main() {
-	// var containerPath, containerType, accessToken string
-	// var ionPath, roomName, reportPath string
-	// var numClients, runSeconds, numRooms int
-	// var consume, produce bool
-	// var staggerSeconds float64
-	// var Audio bool
 	var numRooms int
 	var staggerSeconds float64
 	var r ion.RoomData
@@ -99,6 +87,8 @@ func main() {
 	}
 
 	rooms := make([]*ion.RoomRun, numRooms)
+	reports := make([]*ion.RoomReport, numRooms)
+
 	waitGroup.Add(numRooms)
 	roomName := r.RoomName
 
@@ -123,14 +113,13 @@ func main() {
 	}
 
 	// make loop to stop all rooms
-	for _, r := range rooms {
+	for i, r := range rooms {
 		r.Stop()
+		reports[i] = &r.RoomReport
 	}
 
 	waitGroup.Wait()
 
-	// log.Println("Wait for client shutdown")
-	// waitGroup.Wait()
+	printRoomReports(r.ReportPath, reports)
 	log.Println("Done")
-	// printReport(r.ReportPath, roomRun)
 }

@@ -35,14 +35,15 @@ type Consumer struct {
 }
 
 type PeerReport struct {
-	Name           string
-	StreamsRecvNum int
-	TracksRecvNum  int
-	IceDisconnect  int
-	IceFailure     int
-	Audio, Video   bool
-	PublishError   int
-	UnpublishCalls int
+	Name           string `json:"name"`
+	StreamsRecvNum int    `json:"streamRecvNum"`
+	TracksRecvNum  int    `json:"tracksRecvNum"`
+	IceDisconnect  int    `json:"iceDisconnect"`
+	IceFailure     int    `json:"iceFailure"`
+	Audio          bool   `json:"audio"`
+	Video          bool   `json:"video"`
+	PublishError   int    `json:"publishError"`
+	UnpublishCalls int    `json:"unpublishCalls"`
 }
 
 type RoomClient struct {
