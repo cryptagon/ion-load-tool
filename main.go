@@ -69,7 +69,7 @@ func main() {
 	flag.BoolVar(&r.Audio, "audio", false, "Publish Audio stream from webm file")
 	flag.StringVar(&r.AccessToken, "token", "", "Access token")
 	flag.StringVar(&r.ReportPath, "report", "", "test run report file path. if not provided report will be printed in stdout")
-	flag.IntVar(&numRooms, "rooms", 1, "number of rooms (each room will have --clients number)")
+	flag.IntVar(&numRooms, "rooms", 1, "number of rooms (each room will have -clients number)")
 
 	flag.Parse()
 
