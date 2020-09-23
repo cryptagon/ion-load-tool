@@ -6,6 +6,8 @@ import (
 	"log"
 	"net/url"
 
+	"github.com/dgrijalva/jwt-go"
+
 	"github.com/cloudwebrtc/go-protoo/client"
 	"github.com/cloudwebrtc/go-protoo/logger"
 	"github.com/cloudwebrtc/go-protoo/peer"
@@ -46,6 +48,12 @@ type PeerReport struct {
 	UnpublishCalls int    `json:"unpublishCalls"`
 }
 
+type RoomClaims struct {
+	UID string `json:"uid"`
+	RID string `json:"rid"`
+	jwt.StandardClaims
+}
+
 type RoomClient struct {
 	proto.MediaInfo
 	ClientChans
@@ -54,7 +62,7 @@ type RoomClient struct {
 	WsPeer     *peer.Peer
 	room       proto.RoomInfo
 	name       string
-	token      proto.RoomToken
+	roomToken  string
 	AudioTrack *webrtc.Track
 	VideoTrack *webrtc.Track
 	paused     bool
@@ -72,6 +80,20 @@ func newPeerCon() *webrtc.PeerConnection {
 		log.Fatal(err)
 	}
 	return pc
+}
+
+func generateRoomToken(uid, rid, jwtKey string) string {
+	tokenString := ""
+	if jwtKey != "" {
+		token := jwt.NewWithClaims(jwt.SigningMethodHS512, &RoomClaims{UID: uid, RID: rid})
+		tkStr, err := token.SignedString([]byte(jwtKey))
+		if err != nil {
+			log.Println("Unable to sign token", err)
+			panic("failed signing user token")
+		}
+		tokenString = tkStr
+	}
+	return tokenString
 }
 
 func NewClient(name, room, path string, accessToken string) RoomClient {
@@ -95,9 +117,7 @@ func NewClient(name, room, path string, accessToken string) RoomClient {
 			UID: proto.UID(uidStr),
 			RID: proto.RID(room),
 		},
-		token: proto.RoomToken{
-			Token: accessToken,
-		},
+		roomToken: generateRoomToken(name, room, accessToken),
 		PeerReport: &PeerReport{
 			Name: name,
 		},
@@ -116,8 +136,8 @@ func (t *RoomClient) Init() {
 	}
 	params := url.Values{}
 	params.Add("peer", string(t.room.UID))
-	if t.token.Token != "" {
-		params.Add("access_token", string(t.token.Token))
+	if t.roomToken != "" {
+		params.Add("access_token", t.roomToken)
 	}
 	baseUrl.RawQuery = params.Encode()
 	t.client = client.NewClient(baseUrl.String(), t.handleWebSocketOpen)
@@ -144,7 +164,11 @@ func (t *RoomClient) handleWebSocketOpen(transport *transport.WebSocketTransport
 }
 
 func (t *RoomClient) Join() {
-	joinMsg := proto.JoinMsg{RoomInfo: t.room, RoomToken: t.token, Info: proto.ClientUserInfo{Name: t.name}}
+	joinMsg := proto.JoinMsg{
+		RoomInfo:  t.room,
+		RoomToken: proto.RoomToken{Token: t.roomToken},
+		Info:      proto.ClientUserInfo{Name: t.name},
+	}
 	res := <-t.WsPeer.Request(proto.ClientJoin, joinMsg, nil, nil)
 
 	if res.Err != nil {
@@ -199,7 +223,7 @@ func (t *RoomClient) Publish(codec string) {
 
 	pubMsg := proto.PublishMsg{
 		RoomInfo:  t.room,
-		RoomToken: t.token,
+		RoomToken: proto.RoomToken{Token: t.roomToken},
 		RTCInfo:   proto.RTCInfo{Jsep: offer},
 		Options:   newPublishOptions(codec),
 	}
