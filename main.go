@@ -49,6 +49,17 @@ func printReport(reportPath string, roomRun *ion.RoomRun) {
 	}
 }
 
+func getSuffix(roomNum, index int) string {
+	if roomNum == 1 {
+		return ""
+	}
+	if index < 10 {
+		return fmt.Sprintf("_0%d", index+1)
+	}
+
+	return fmt.Sprintf("_%d", index+1)
+}
+
 func main() {
 	// var containerPath, containerType, accessToken string
 	// var ionPath, roomName, reportPath string
@@ -57,13 +68,14 @@ func main() {
 	// var staggerSeconds float64
 	// var Audio bool
 	var numRooms int
+	var staggerSeconds float64
 	var r ion.RoomData
 
 	flag.StringVar(&r.ContainerPath, "produce", "", "path to the media file you want to playback")
 	flag.StringVar(&r.IonPath, "ion-url", "ws://localhost:8443/ws", "websocket url for ion biz system")
 	flag.StringVar(&r.RoomName, "room-name", "Video-demo", "Room name for Ion")
 	flag.IntVar(&r.NumClients, "clients", 1, "Number of clients to start")
-	flag.Float64Var(&r.StaggerSeconds, "stagger", 1.0, "Number of seconds to stagger client start and stop")
+	flag.Float64Var(&staggerSeconds, "stagger", 1.0, "Number of seconds to stagger client start and stop")
 	flag.IntVar(&r.RunSeconds, "seconds", 60, "Number of seconds to run test for")
 	flag.BoolVar(&r.Consume, "consume", false, "Run subscribe to all streams and consume data")
 	flag.BoolVar(&r.Audio, "audio", false, "Publish Audio stream from webm file")
@@ -74,6 +86,8 @@ func main() {
 	flag.Parse()
 
 	r.Produce = r.ContainerPath != ""
+	r.StaggerDuration = time.Duration(staggerSeconds*1000) * time.Millisecond
+
 	// Validate type
 	if r.Produce {
 		ext, ok := producer.ValidateVPFile(r.ContainerPath)
@@ -84,11 +98,18 @@ func main() {
 		r.ContainerType = ext
 	}
 
-	waitGroup.Add(1)
+	rooms := make([]*ion.RoomRun, numRooms)
+	waitGroup.Add(numRooms)
+	roomName := r.RoomName
 
-	// make loop to start all rooms
-	roomRun := &ion.RoomRun{}
-	go roomRun.Run(&r, &waitGroup)
+	for i := 0; i < numRooms; i++ {
+		rData := r
+		rData.RoomName = fmt.Sprintf("%v%v", roomName, getSuffix(numRooms, i))
+		roomRun := &ion.RoomRun{}
+		go roomRun.Run(&rData, &waitGroup)
+		rooms[i] = roomRun
+		time.Sleep(rData.StaggerDuration)
+	}
 
 	timer := time.NewTimer(time.Duration(r.RunSeconds) * time.Second)
 
@@ -102,12 +123,14 @@ func main() {
 	}
 
 	// make loop to stop all rooms
-	roomRun.Stop()
+	for _, r := range rooms {
+		r.Stop()
+	}
 
 	waitGroup.Wait()
 
 	// log.Println("Wait for client shutdown")
 	// waitGroup.Wait()
 	log.Println("Done")
-	printReport(r.ReportPath, roomRun)
+	// printReport(r.ReportPath, roomRun)
 }
