@@ -1,8 +1,10 @@
 package main
 
 import (
+	"encoding/json"
 	"flag"
 	"fmt"
+	"io/ioutil"
 	"log"
 	"os"
 	"os/signal"
@@ -13,8 +15,6 @@ import (
 	"github.com/cloudwebrtc/go-protoo/logger"
 	"github.com/pion/ion-load-tool/ion"
 	"github.com/pion/producer"
-	"github.com/pion/producer/ivf"
-	"github.com/pion/producer/webm"
 )
 
 var (
@@ -26,148 +26,100 @@ func init() {
 	logger.SetLevel(logger.InfoLevel)
 }
 
-type testRun struct {
-	client      ion.RoomClient
-	consume     bool
-	produce     bool
-	mediaSource producer.IFileProducer
-	doneCh      chan interface{}
-	index       int
+func printRoomReports(reportPath string, roomReports []*ion.RoomReport) {
+	report, err := json.MarshalIndent(roomReports, "", "    ")
+	if err != nil {
+		log.Fatal("Failed to generate report", err)
+	}
+	if reportPath != "" {
+		err := ioutil.WriteFile(reportPath, report, 0644)
+		if err != nil {
+			log.Println("Failed to write report to " + reportPath + "!!!!!")
+			log.Println(string(report))
+		}
+	} else {
+		log.Println(string(report))
+	}
+
 }
 
-func (t *testRun) runClient() {
-	defer waitGroup.Done()
-
-	t.client.Init()
-	t.client.Join()
-
-	// Start producer
-	if t.produce {
-		log.Println("Video codes is", t.mediaSource.VideoCodec())
-		t.client.Publish(t.mediaSource.VideoCodec())
+func getSuffix(roomNum, index int) string {
+	if roomNum == 1 {
+		return ""
+	}
+	if index < 10 {
+		return fmt.Sprintf("_0%d", index+1)
 	}
 
-	// Wire consumers
-	// Wait for the end of the test then shutdown
-	done := false
-	for !done {
-		select {
-		case msg := <-t.client.OnStreamAdd:
-			if t.consume {
-				t.client.Subscribe(msg)
-			}
-		case msg := <-t.client.OnStreamRemove:
-			if t.consume {
-				t.client.UnSubscribe(msg.MediaInfo)
-			}
-		case <-t.client.OnBroadcast:
-		case <-t.doneCh:
-			done = true
-			break
-		}
-	}
-	log.Printf("Begin client %v shutdown", t.index)
-
-	// Close producer and sender
-	if t.produce {
-		t.mediaSource.Stop()
-		t.client.UnPublish()
-	}
-
-	// Close client
-	t.client.Leave()
-	t.client.Close()
-}
-
-func (t *testRun) setupClient(room, path, vidFile, fileType string, audio bool) {
-	name := fmt.Sprintf(clientNameTmpl, t.index)
-	t.client = ion.NewClient(name, room, path)
-	t.doneCh = make(chan interface{})
-
-	if t.produce {
-		// Configure sender tracks
-		offset := t.index * 5
-		if fileType == "webm" {
-			t.mediaSource = webm.NewMFileProducer(vidFile, offset, producer.TrackSelect{
-				Audio: audio,
-				Video: true,
-			})
-		} else if fileType == "ivf" {
-			audio = false
-			t.mediaSource = ivf.NewIVFProducer(vidFile, offset)
-		}
-		t.client.VideoTrack = t.mediaSource.VideoTrack()
-		if audio {
-			t.client.AudioTrack = t.mediaSource.AudioTrack()
-		}
-		t.mediaSource.Start()
-	}
-
-	go t.runClient()
+	return fmt.Sprintf("_%d", index+1)
 }
 
 func main() {
-	var containerPath, containerType string
-	var ionPath, roomName string
-	var numClients, runSeconds int
-	var consume, produce bool
+	var numRooms int
 	var staggerSeconds float64
-	var audio bool
+	var r ion.RoomData
 
-	flag.StringVar(&containerPath, "produce", "", "path to the media file you want to playback")
-	flag.StringVar(&ionPath, "ion-url", "ws://localhost:8443/ws", "websocket url for ion biz system")
-	flag.StringVar(&roomName, "room", "video-demo", "Room name for Ion")
-	flag.IntVar(&numClients, "clients", 1, "Number of clients to start")
+	flag.StringVar(&r.ContainerPath, "produce", "", "path to the media file you want to playback")
+	flag.StringVar(&r.IonPath, "ion-url", "ws://localhost:8443/ws", "websocket url for ion biz system")
+	flag.StringVar(&r.RoomName, "room-name", "Video-demo", "Room name for Ion")
+	flag.IntVar(&r.NumClients, "clients", 1, "Number of clients to start")
 	flag.Float64Var(&staggerSeconds, "stagger", 1.0, "Number of seconds to stagger client start and stop")
-	flag.IntVar(&runSeconds, "seconds", 60, "Number of seconds to run test for")
-	flag.BoolVar(&consume, "consume", false, "Run subscribe to all streams and consume data")
-	flag.BoolVar(&audio, "audio", false, "Publish audio stream from webm file")
+	flag.IntVar(&r.RunSeconds, "seconds", 60, "Number of seconds to run test for")
+	flag.BoolVar(&r.Consume, "consume", false, "Run subscribe to all streams and consume data")
+	flag.BoolVar(&r.Audio, "audio", false, "Publish Audio stream from webm file")
+	flag.StringVar(&r.AccessToken, "token", "", "Access token")
+	flag.StringVar(&r.ReportPath, "report", "", "test run report file path. if not provided report will be printed in stdout")
+	flag.IntVar(&numRooms, "rooms", 1, "number of rooms (each room will have -clients number)")
 
 	flag.Parse()
 
-	produce = containerPath != ""
+	r.Produce = r.ContainerPath != ""
+	r.StaggerDuration = time.Duration(staggerSeconds*1000) * time.Millisecond
 
 	// Validate type
-	if produce {
-		ext, ok := producer.ValidateVPFile(containerPath)
+	if r.Produce {
+		ext, ok := producer.ValidateVPFile(r.ContainerPath)
 		log.Println(ext)
 		if !ok {
 			panic("Only IVF and WEBM containers are supported.")
 		}
-		containerType = ext
+		r.ContainerType = ext
 	}
 
-	clients := make([]*testRun, numClients)
-	staggerDur := time.Duration(staggerSeconds*1000) * time.Millisecond
-	waitGroup.Add(numClients)
+	rooms := make([]*ion.RoomRun, numRooms)
+	reports := make([]*ion.RoomReport, numRooms)
 
-	for i := 0; i < numClients; i++ {
-		cfg := &testRun{consume: consume, produce: produce, index: i}
-		cfg.setupClient(roomName, ionPath, containerPath, containerType, audio)
-		clients[i] = cfg
-		time.Sleep(staggerDur)
+	waitGroup.Add(numRooms)
+	roomName := r.RoomName
+
+	for i := 0; i < numRooms; i++ {
+		rData := r
+		rData.RoomName = fmt.Sprintf("%v%v", roomName, getSuffix(numRooms, i))
+		roomRun := &ion.RoomRun{}
+		go roomRun.Run(&rData, &waitGroup)
+		rooms[i] = roomRun
+		time.Sleep(rData.StaggerDuration)
 	}
+
+	timer := time.NewTimer(time.Duration(r.RunSeconds) * time.Second)
 
 	// Setup shutdown
 	sigs := make(chan os.Signal, 1)
 	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
-	timer := time.NewTimer(time.Duration(runSeconds) * time.Second)
 
 	select {
 	case <-sigs:
 	case <-timer.C:
 	}
 
-	for i, a := range clients {
-		// Signal shutdown
-		close(a.doneCh)
-		// Staggered shutdown.
-		if len(clients) > 1 && i < len(clients)-1 {
-			time.Sleep(staggerDur)
-		}
+	// make loop to stop all rooms
+	for i, r := range rooms {
+		r.Stop()
+		reports[i] = &r.RoomReport
 	}
 
-	log.Println("Wait for client shutdown")
 	waitGroup.Wait()
-	log.Println("All clients shut down")
+
+	printRoomReports(r.ReportPath, reports)
+	log.Println("Done")
 }

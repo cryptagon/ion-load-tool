@@ -2,7 +2,11 @@ package ion
 
 import (
 	"encoding/json"
+	"fmt"
 	"log"
+	"net/url"
+
+	"github.com/dgrijalva/jwt-go"
 
 	"github.com/cloudwebrtc/go-protoo/client"
 	"github.com/cloudwebrtc/go-protoo/logger"
@@ -32,13 +36,33 @@ type Consumer struct {
 	Info proto.MediaInfo
 }
 
+type PeerReport struct {
+	Name           string `json:"name"`
+	StreamsRecvNum int    `json:"streamRecvNum"`
+	TracksRecvNum  int    `json:"tracksRecvNum"`
+	IceDisconnect  int    `json:"iceDisconnect"`
+	IceFailure     int    `json:"iceFailure"`
+	Audio          bool   `json:"audio"`
+	Video          bool   `json:"video"`
+	PublishError   int    `json:"publishError"`
+	UnpublishCalls int    `json:"unpublishCalls"`
+}
+
+type RoomClaims struct {
+	UID string `json:"uid"`
+	RID string `json:"rid"`
+	jwt.StandardClaims
+}
+
 type RoomClient struct {
 	proto.MediaInfo
 	ClientChans
+	*PeerReport
 	pubPeerCon *webrtc.PeerConnection
 	WsPeer     *peer.Peer
 	room       proto.RoomInfo
 	name       string
+	roomToken  string
 	AudioTrack *webrtc.Track
 	VideoTrack *webrtc.Track
 	paused     bool
@@ -58,7 +82,21 @@ func newPeerCon() *webrtc.PeerConnection {
 	return pc
 }
 
-func NewClient(name, room, path string) RoomClient {
+func generateRoomToken(uid, rid, jwtKey string) string {
+	tokenString := ""
+	if jwtKey != "" {
+		token := jwt.NewWithClaims(jwt.SigningMethodHS512, &RoomClaims{UID: uid, RID: rid})
+		tkStr, err := token.SignedString([]byte(jwtKey))
+		if err != nil {
+			log.Println("Unable to sign token", err)
+			panic("failed signing user token")
+		}
+		tokenString = tkStr
+	}
+	return tokenString
+}
+
+func NewClient(name, room, path string, accessToken string) RoomClient {
 	pc := newPeerCon()
 	uidStr := name
 	uuid, err := uuid.NewRandom()
@@ -76,8 +114,12 @@ func NewClient(name, room, path string) RoomClient {
 		},
 		pubPeerCon: pc,
 		room: proto.RoomInfo{
-			Uid: uidStr,
-			Rid: room,
+			UID: proto.UID(uidStr),
+			RID: proto.RID(room),
+		},
+		roomToken: generateRoomToken(name, room, accessToken),
+		PeerReport: &PeerReport{
+			Name: name,
 		},
 		name:      name,
 		ionPath:   path,
@@ -87,13 +129,24 @@ func NewClient(name, room, path string) RoomClient {
 }
 
 func (t *RoomClient) Init() {
-	t.client = client.NewClient(t.ionPath+"?peer="+t.room.Uid, t.handleWebSocketOpen)
+	baseUrl, err := url.Parse(t.ionPath)
+	if err != nil {
+		fmt.Println("Malformed URL: ", err.Error())
+		return
+	}
+	params := url.Values{}
+	params.Add("peer", string(t.room.UID))
+	if t.roomToken != "" {
+		params.Add("access_token", t.roomToken)
+	}
+	baseUrl.RawQuery = params.Encode()
+	t.client = client.NewClient(baseUrl.String(), t.handleWebSocketOpen)
 }
 
 func (t *RoomClient) handleWebSocketOpen(transport *transport.WebSocketTransport) {
 	logger.Infof("handleWebSocketOpen")
 
-	t.WsPeer = peer.NewPeer(t.room.Uid, transport)
+	t.WsPeer = peer.NewPeer(string(t.room.UID), transport)
 
 	go func() {
 		for {
@@ -111,7 +164,11 @@ func (t *RoomClient) handleWebSocketOpen(transport *transport.WebSocketTransport
 }
 
 func (t *RoomClient) Join() {
-	joinMsg := proto.JoinMsg{RoomInfo: t.room, Info: proto.ClientUserInfo{Name: t.name}}
+	joinMsg := proto.JoinMsg{
+		RoomInfo:  t.room,
+		RoomToken: proto.RoomToken{Token: t.roomToken},
+		Info:      proto.ClientUserInfo{Name: t.name},
+	}
 	res := <-t.WsPeer.Request(proto.ClientJoin, joinMsg, nil, nil)
 
 	if res.Err != nil {
@@ -127,40 +184,54 @@ func (t *RoomClient) Publish(codec string) {
 		if _, err := t.pubPeerCon.AddTrack(t.AudioTrack); err != nil {
 			log.Print(err)
 			panic(err)
+		} else {
+			t.PeerReport.Audio = true
 		}
 	}
 	if t.VideoTrack != nil {
 		if _, err := t.pubPeerCon.AddTrack(t.VideoTrack); err != nil {
 			log.Print(err)
 			panic(err)
+		} else {
+			t.PeerReport.Video = true
 		}
 	}
 
 	t.pubPeerCon.OnICEConnectionStateChange(func(connectionState webrtc.ICEConnectionState) {
 		log.Printf("Client %v producer State has changed %s \n", t.name, connectionState.String())
+		switch connectionState {
+		case webrtc.ICEConnectionStateDisconnected:
+			t.PeerReport.IceDisconnect++
+		case webrtc.ICEConnectionStateFailed:
+			t.PeerReport.IceFailure++
+		}
 	})
 
 	// Create an offer to send to the browser
 	offer, err := t.pubPeerCon.CreateOffer(nil)
 	if err != nil {
+		t.PeerReport.PublishError++
 		panic(err)
 	}
 
 	// Sets the LocalDescription, and starts our UDP listeners
 	err = t.pubPeerCon.SetLocalDescription(offer)
 	if err != nil {
+		t.PeerReport.PublishError++
 		panic(err)
 	}
 
 	pubMsg := proto.PublishMsg{
-		RoomInfo: t.room,
-		RTCInfo:  proto.RTCInfo{Jsep: offer},
-		Options:  newPublishOptions(codec),
+		RoomInfo:  t.room,
+		RoomToken: proto.RoomToken{Token: t.roomToken},
+		RTCInfo:   proto.RTCInfo{Jsep: offer},
+		Options:   newPublishOptions(codec),
 	}
 
 	res := <-t.WsPeer.Request(proto.ClientPublish, pubMsg, nil, nil)
 	if res.Err != nil {
 		logger.Infof("publish reject: %d => %s", res.Err.Code, res.Err.Text)
+		t.PeerReport.PublishError++
 		return
 	}
 
@@ -168,6 +239,7 @@ func (t *RoomClient) Publish(codec string) {
 	err = json.Unmarshal(res.Result, &msg)
 	if err != nil {
 		log.Println(err)
+		t.PeerReport.PublishError++
 		return
 	}
 
@@ -176,6 +248,7 @@ func (t *RoomClient) Publish(codec string) {
 	// Set the remote SessionDescription
 	err = t.pubPeerCon.SetRemoteDescription(msg.Jsep)
 	if err != nil {
+		t.PeerReport.PublishError++
 		panic(err)
 	}
 }
@@ -225,6 +298,7 @@ func (t *RoomClient) UnPublish() {
 
 	// Stop producer peer connection
 	t.pubPeerCon.Close()
+	t.PeerReport.UnpublishCalls++
 }
 
 func (t *RoomClient) Subscribe(subData proto.StreamAddMsg) {
@@ -232,13 +306,14 @@ func (t *RoomClient) Subscribe(subData proto.StreamAddMsg) {
 	log.Println("Subscribing to ", info)
 	id := len(t.consumers) // broken make better
 	codec := ""
-	// Find codec of first video track
+	// Find codec of first Video track
 	for _, trackList := range subData.Tracks {
 		if len(trackList) == 0 {
 			continue
 		}
+		t.PeerReport.TracksRecvNum += len(trackList)
 		track := trackList[0]
-		if track.Type == "video" {
+		if track.Type == "Video" {
 			codec = track.Codec
 			break
 		}
@@ -285,6 +360,7 @@ func (t *RoomClient) Subscribe(subData proto.StreamAddMsg) {
 	// Create consumer
 	consumer := &Consumer{pc, info}
 	t.consumers = append(t.consumers, consumer)
+	t.PeerReport.StreamsRecvNum++
 
 	log.Println("Subscribe complete")
 }
